@@ -84,8 +84,8 @@
   if (branchRoot) {
     var input = doc.getElementById("branch-search");
     var chips = doc.querySelectorAll(".chip[data-filter]");
-    var cards = branchRoot.querySelectorAll(".branch-card");
-    var groups = branchRoot.querySelectorAll(".branch-group");
+    var cards = branchRoot.querySelectorAll("[data-branch]");
+    var groups = Array.prototype.slice.call(branchRoot.querySelectorAll("[data-group]")).reverse();
     var empty = doc.querySelector(".empty-state");
     var status = doc.getElementById("branch-status");
     var active = "all";
@@ -103,7 +103,7 @@
         if (visible) shown++;
       });
       groups.forEach(function (g) {
-        g.hidden = !g.querySelector(".branch-card:not([hidden])");
+        g.hidden = !g.querySelector("[data-branch]:not([hidden])");
       });
       if (empty) empty.classList.toggle("is-visible", shown === 0);
       if (status) status.textContent = shown === 0 ? "Eşleşen şube bulunamadı." : shown + " şube gösteriliyor.";

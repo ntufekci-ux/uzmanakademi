@@ -87,6 +87,49 @@ MENU_ORDER = ["Bakırköy","Beylikdüzü","Üsküdar","Halkalı","Şişli","Malt
               "Çankaya","Etimesgut","Kocaeli","Konak","Karşıyaka","Bursa","Adana","Antalya","Konya","Gaziantep","Kayseri",
               "Sakarya","Mersin","Samsun","Diyarbakır","Gebze","Denizli","Eskişehir","Başakşehir"]
 BYNAME = {b[0]: b for b in BR}
+# Her şubenin bağlı olduğu il, ilçe ve (İstanbul için) yaka
+LOC = {
+    "Bakırköy": ("İstanbul", "Bakırköy", "Avrupa Yakası"), "Başakşehir": ("İstanbul", "Başakşehir", "Avrupa Yakası"),
+    "Beylikdüzü": ("İstanbul", "Beylikdüzü", "Avrupa Yakası"), "Gaziosmanpaşa": ("İstanbul", "Gaziosmanpaşa", "Avrupa Yakası"),
+    "Halkalı": ("İstanbul", "Küçükçekmece", "Avrupa Yakası"), "Şişli": ("İstanbul", "Şişli", "Avrupa Yakası"),
+    "Ataşehir": ("İstanbul", "Ataşehir", "Anadolu Yakası"), "Maltepe": ("İstanbul", "Maltepe", "Anadolu Yakası"),
+    "Pendik": ("İstanbul", "Pendik", "Anadolu Yakası"), "Sancaktepe": ("İstanbul", "Sancaktepe", "Anadolu Yakası"),
+    "Üsküdar": ("İstanbul", "Üsküdar", "Anadolu Yakası"),
+    "Çankaya": ("Ankara", "Çankaya", ""), "Etimesgut": ("Ankara", "Etimesgut", ""),
+    "Konak": ("İzmir", "Konak", ""), "Karşıyaka": ("İzmir", "Karşıyaka", ""),
+    "Kocaeli": ("Kocaeli", "İzmit", ""), "Gebze": ("Kocaeli", "Gebze", ""),
+    "Adana": ("Adana", "Seyhan", ""), "Antalya": ("Antalya", "Muratpaşa", ""), "Bursa": ("Bursa", "Osmangazi", ""),
+    "Denizli": ("Denizli", "Pamukkale", ""), "Diyarbakır": ("Diyarbakır", "Kayapınar", ""),
+    "Eskişehir": ("Eskişehir", "Tepebaşı", ""), "Gaziantep": ("Gaziantep", "Şehitkamil", ""),
+    "Kayseri": ("Kayseri", "Kocasinan", ""), "Konya": ("Konya", "Selçuklu", ""), "Mersin": ("Mersin", "Yenişehir", ""),
+    "Sakarya": ("Sakarya", "Adapazarı", ""), "Samsun": ("Samsun", "İlkadım", ""),
+}
+PLATE = {"İstanbul": "34", "Ankara": "06", "İzmir": "35", "Kocaeli": "41", "Adana": "01", "Antalya": "07",
+         "Bursa": "16", "Denizli": "20", "Diyarbakır": "21", "Eskişehir": "26", "Gaziantep": "27", "Kayseri": "38",
+         "Konya": "42", "Mersin": "33", "Sakarya": "54", "Samsun": "55"}
+_TR = "abcçdefgğhıijklmnoöprsştuüvyz"
+def tr_key(t):
+    t = t.replace("I", "ı").replace("İ", "i").lower()
+    return [(_TR.index(ch) if ch in _TR else 100 + ord(ch)) for ch in t]
+BIG = ["İstanbul", "Ankara", "İzmir", "Kocaeli"]
+IL_ORDER = BIG + sorted({v[0] for v in LOC.values()} - set(BIG), key=tr_key)
+YAKA_ORDER = ["Avrupa Yakası", "Anadolu Yakası"]
+
+def il_groups():
+    """[(il, [(yaka, [şube, ...]), ...]), ...] — şubeler ilçe adına göre sıralı."""
+    out = []
+    for il in IL_ORDER:
+        items = sorted([b for b in BR if LOC[b[0]][0] == il], key=lambda b: tr_key(LOC[b[0]][1]))
+        yakas = [y for y in YAKA_ORDER if any(LOC[b[0]][2] == y for b in items)]
+        if yakas:
+            out.append((il, [(y, [b for b in items if LOC[b[0]][2] == y]) for y in yakas]))
+        else:
+            out.append((il, [("", items)]))
+    return out
+
+def loc_label(b):
+    il, ilce, _ = LOC[b[0]]
+    return f"{il} / {ilce}"
 def label(b):
     n, r = b[0], b[1]
     if r == "ankara": return f"Ankara/{n}"
@@ -124,8 +167,15 @@ def head(title, desc, canonical):
 
 def header(active):
     def cur(k): return ' aria-current="page"' if active == k else ""
-    branch_links = "\n".join(
-        f'              <a href="{BYNAME[n][5]}.html">{e(label(BYNAME[n]))}</a>' for n in MENU_ORDER)
+    G = dict(il_groups())
+    def grp(title, items, label=lambda b: b[0]):
+        return (f'<div class="dd-group"><span class="dd-group__title">{e(title)}</span>' +
+                "".join(f'<a href="{b[5]}.html">{e(label(b))}</a>' for b in items) + "</div>")
+    ist = dict(G["İstanbul"])
+    cols = [grp("İstanbul · Avrupa", ist["Avrupa Yakası"]), grp("İstanbul · Anadolu", ist["Anadolu Yakası"]),
+            '<div class="dd-stack">' + "".join(grp(il, G[il][0][1]) for il in ("Ankara", "İzmir", "Kocaeli")) + "</div>",
+            grp("Diğer iller", [b for il in IL_ORDER if il not in BIG for b in G[il][0][1]], lambda b: LOC[b[0]][0])]
+    branch_links = "\n".join("              " + c for c in cols)
     return f"""<a class="skip-link" href="#icerik">İçeriğe geç</a>
 
 <div class="topbar">
@@ -267,8 +317,17 @@ def lead_section():
 """
 
 def footer():
-    branches = "\n".join(
-        f'          <li><a href="{BYNAME[n][5]}.html">{e(label(BYNAME[n]))}</a></li>' for n in MENU_ORDER)
+    fgroups = []
+    for il, yakas in il_groups():
+        if il not in BIG:
+            continue
+        items = [b for y, its in yakas for b in its]
+        fgroups.append(f'<div class="fb-group"><span class="fb-group__title">{e(il)}</span><ul>' +
+                       "".join(f'<li><a href="{b[5]}.html">{e(b[0])}</a></li>' for b in items) + "</ul></div>")
+    others = [b for il, yakas in il_groups() if il not in BIG for y, its in yakas for b in its]
+    fgroups.append('<div class="fb-group"><span class="fb-group__title">Diğer iller</span><ul>' +
+                   "".join(f'<li><a href="{b[5]}.html">{e(LOC[b[0]][0])}</a></li>' for b in others) + "</ul></div>")
+    branches = "\n".join("        " + g for g in fgroups)
     return f"""
 <footer class="site-footer">
   <div class="container footer-top">
@@ -314,9 +373,9 @@ def footer():
     </div>
     <div class="footer-col footer-branches">
       <h4>Şubelerimiz</h4>
-      <ul>
+      <div class="fb-groups">
 {branches}
-      </ul>
+      </div>
     </div>
   </div>
   <div class="footer-bottom">
@@ -358,7 +417,7 @@ def branch_card(b):
     return f"""        <article class="branch-card" data-region="{reg}">
           <div class="branch-card__head">
             <span class="branch-card__pin">{ic("pin")}</span>
-            <h3>{e(name)} Şubesi<small>{e(city)}</small></h3>
+            <h3>{e(name)} Şubesi<small>{e(loc_label(b))}</small></h3>
           </div>
           <address>{e(addr)}</address>{lmh}
           <div class="branch-card__actions">
@@ -367,17 +426,54 @@ def branch_card(b):
           </div>
         </article>"""
 
-def contact_page():
-    groups = []
-    for key, title in REGIONS:
-        items = [b for b in BR if b[1] == key]
-        cards = "\n".join(branch_card(b) for b in items)
-        groups.append(f"""      <div class="branch-group" data-group="{key}">
-        <h3 class="branch-group__title">{title} <span>{len(items)} şube</span></h3>
-        <div class="branch-grid">
-{cards}
+def district_row(b):
+    name, reg, city, addr, lm, slug = b
+    il, ilce, yaka = LOC[name]
+    tag = f'<span class="district__tag">{e(name)} Şubesi</span>' if name != ilce else ""
+    lmh = f'<span class="district__lm">{ic("landmark")} {e(lm)}</span>' if lm else ""
+    kw = " ".join(x for x in (il, ilce, name, yaka) if x)
+    return f"""          <li class="district" data-branch data-region="{reg}" data-keywords="{e(kw)}">
+            <div class="district__main">
+              <h4 class="district__name">{e(ilce)}{tag}</h4>
+              <address>{e(addr)}</address>
+              {lmh}
+            </div>
+            <div class="district__actions">
+              <a href="{maps(b)}" target="_blank" rel="noopener" aria-label="{e(name)} Şubesi için yol tarifi al">{ic("nav")} Yol tarifi</a>
+              <a href="{slug}.html" aria-label="{e(name)} Şubesi sayfası">{ic("info")} Şube sayfası</a>
+            </div>
+          </li>"""
+
+
+def il_card(il, yakas):
+    n = sum(len(x) for _, x in yakas)
+    wide = len(yakas) > 1
+    parts = []
+    for y, items in yakas:
+        rows = "\n".join(district_row(b) for b in items)
+        sub = f'<p class="il-card__sub">{e(y)} <span>{len(items)} şube</span></p>' if y else ""
+        parts.append(f"""        <div class="il-card__part" data-group>
+          {sub}
+          <ul class="district-list">
+{rows}
+          </ul>
+        </div>""")
+    slug = il.replace("İ", "i").replace("I", "ı").lower().translate(str.maketrans("çğıöşü", "cgiosu"))
+    return f"""      <section class="il-card{" il-card--wide" if wide else ""}" data-group id="il-{slug}" aria-label="{e(il)} şubeleri">
+        <header class="il-card__head">
+          <span class="il-card__plate" aria-hidden="true">{PLATE.get(il, "")}</span>
+          <h3>{e(il)}</h3>
+          <span class="il-card__count">{n} şube</span>
+        </header>
+        <div class="il-card__body">
+{chr(10).join(parts)}
         </div>
-      </div>""")
+      </section>"""
+
+
+def contact_page():
+    cards = [il_card(il, yakas) for il, yakas in il_groups()]
+    groups = ['    <div class="il-grid">\n' + "\n".join(cards) + "\n    </div>"]
     chips = '<button class="chip" type="button" data-filter="all" aria-pressed="true">Tümü</button>' + "".join(
         f'<button class="chip" type="button" data-filter="{k}" aria-pressed="false">{t}</button>' for k, t in REGIONS)
 
@@ -451,7 +547,7 @@ def contact_page():
     <div class="section-head">
       <span class="eyebrow">Adreslerimiz</span>
       <h2 class="section-title" id="branches-title">Şubelerimiz</h2>
-      <p class="section-lead">İl, ilçe veya semt adıyla arayın; yol tarifi alın ya da şube sayfasını ziyaret edin.</p>
+      <p class="section-lead">Şubelerimiz il ve ilçelere göre listelenmiştir. İl, ilçe veya semt adıyla arayabilir; yol tarifi alabilir ya da şube sayfasını ziyaret edebilirsiniz.</p>
     </div>
 
     <div class="branches-toolbar">
@@ -1612,7 +1708,9 @@ def privacy_page():
 
 # ---------------------------------------------------------------- Dilek & Şikayet
 def complaint_page():
-    sube_opts = "".join(f"<option>{e(BYNAME[n][0])}</option>" for n in MENU_ORDER) + "<option>Canlı Online</option>"
+    sube_opts = "".join(
+        f'<optgroup label="{e(il)}">' + "".join(f"<option>{e(b[0])}</option>" for y, its in yakas for b in its) + "</optgroup>"
+        for il, yakas in il_groups()) + "<option>Canlı Online</option>"
     konu_opts = "".join(f"<option>{x}</option>" for x in ["Öneri", "Şikayet", "Talep", "Teşekkür", "Diğer"])
     body = inner_hero([HOME, ("Dilek & Şikayet", None)], "İletişim formu",
                       "Görüşleriniz bizim için <em>değerli</em>",
@@ -1705,13 +1803,14 @@ def branch_pages():
         d = BD[slug]
         heading = d["heading"]  # "Bakırköy Şubemiz"
         paras = [x for p in d["text"].split("\n") for x in split_para(p)]
-        same = [x for x in BR if x[1] == reg and x[5] != slug]
+        same = sorted([x for x in BR if x[1] == reg and x[5] != slug],
+                      key=lambda x: (LOC[x[0]][2] != LOC[name][2], tr_key(LOC[x[0]][1])))
         if len(same) < 3:
             same += [x for x in BR if x[1] != reg and x[5] != slug and x[1] == "diger"][: 3 - len(same)]
         near = "\n".join(branch_card(x) for x in same[:6])
         q = f"Uzman Akademi {name} Şubesi, {addr}"
         lm_h = f'<span>{ic("landmark")} {e(lm)}</span>' if lm else ""
-        body = inner_hero([HOME, ("Şubeler", "iletisim.html"), (f"{name} Şubesi", None)], f"Hızlı Okuma Kursu · {e(city)}",
+        body = inner_hero([HOME, ("Şubeler", "iletisim.html"), (f"{name} Şubesi", None)], f"Hızlı Okuma Kursu · {e(loc_label(b))}",
                           f"{e(heading.replace(' Şubemiz', ''))} <em>Şubemiz</em>", e(addr),
                           f"assets/img/sube/{slug}.jpg", clean_alt(d["alt"], name),
                           actions=f'<a class="btn btn--primary" href="tel:4443644">{ic("phone")} 444 3 644</a><a class="btn btn--ghost-light" href="{maps(b)}" target="_blank" rel="noopener">{ic("nav")} Yol tarifi al</a>',
