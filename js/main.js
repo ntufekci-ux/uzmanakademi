@@ -186,22 +186,125 @@
       }
 
       /* Sunucu bağlantısı tanımlı değilse e-posta istemcisiyle gönder */
-      var lines = [
-        "İsim: " + (data.get("isim") || "-"),
-        "Telefon: +90 " + (data.get("telefon") || "-"),
-        "İl ve İlçe: " + (data.get("il_ilce") || "-"),
-        "Sınıf/Düzey: " + (data.get("sinif") || "-"),
-        "",
-        "Mesaj:",
-        data.get("mesaj") || "-"
-      ];
-      var href = "mailto:info@uzmanakademi.com.tr?subject=" +
-        encodeURIComponent("Detaylı bilgi talebi — " + (data.get("il_ilce") || "")) +
+      var lines = [];
+      form.querySelectorAll("input[name], select[name], textarea[name]").forEach(function (f) {
+        var lab = form.querySelector("label[for='" + f.id + "']");
+        var name = lab ? lab.firstChild.textContent.trim() : f.name;
+        var val = f.value.trim() || "-";
+        if (f === phone && f.value.trim()) val = "+90 " + val;
+        lines.push(name + ": " + val);
+      });
+      var subject = (form.dataset.subject || "Detaylı bilgi talebi") +
+        (data.get("il_ilce") ? " — " + data.get("il_ilce") : "");
+      var href = "mailto:info@uzmanakademi.com.tr?subject=" + encodeURIComponent(subject) +
         "&body=" + encodeURIComponent(lines.join("\n"));
       window.location.href = href;
       done();
     });
   });
+
+  /* ---------- YouTube videoları (tıklayınca yüklenir) ---------- */
+  var modal = null;
+  var lastTrigger = null;
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.remove("is-open");
+    modal.querySelector(".video-modal__box").innerHTML = "";
+    body.style.overflow = "";
+    if (lastTrigger) lastTrigger.focus();
+  }
+  function openVideo(id, title, vertical, trigger) {
+    if (!modal) {
+      modal = doc.createElement("div");
+      modal.className = "video-modal";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.innerHTML = '<div class="video-modal__wrap" style="position:relative"><button class="video-modal__close" type="button" aria-label="Videoyu kapat">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>' +
+        '<div class="video-modal__box"></div></div>';
+      body.appendChild(modal);
+      modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+      modal.querySelector(".video-modal__close").addEventListener("click", closeModal);
+      doc.addEventListener("keydown", function (e) { if (e.key === "Escape" && modal.classList.contains("is-open")) closeModal(); });
+    }
+    lastTrigger = trigger;
+    var box = modal.querySelector(".video-modal__box");
+    box.classList.toggle("is-vertical", !!vertical);
+    var iframe = doc.createElement("iframe");
+    iframe.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?autoplay=1&rel=0&playsinline=1";
+    iframe.title = title || "Video";
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.allowFullScreen = true;
+    box.innerHTML = "";
+    box.appendChild(iframe);
+    modal.setAttribute("aria-label", title || "Video");
+    modal.classList.add("is-open");
+    body.style.overflow = "hidden";
+    modal.querySelector(".video-modal__close").focus();
+  }
+  doc.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-yt]");
+    if (!t) return;
+    e.preventDefault();
+    if (t.dataset.inline !== undefined) {
+      var iframe = doc.createElement("iframe");
+      iframe.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(t.dataset.yt) + "?autoplay=1&rel=0&playsinline=1";
+      iframe.title = t.dataset.title || "Video";
+      iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+      iframe.allowFullScreen = true;
+      iframe.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0";
+      t.replaceWith(iframe);
+      return;
+    }
+    openVideo(t.dataset.yt, t.dataset.title, t.dataset.vertical !== undefined, t);
+  });
+
+  /* ---------- Daha fazla göster ---------- */
+  doc.querySelectorAll("[data-more]").forEach(function (btn) {
+    var grid = doc.getElementById(btn.dataset.more);
+    var step = parseInt(btn.dataset.step || "12", 10);
+    if (!grid) return;
+    btn.addEventListener("click", function () {
+      var hidden = grid.querySelectorAll(":scope > [hidden]");
+      for (var i = 0; i < Math.min(step, hidden.length); i++) hidden[i].hidden = false;
+      if (grid.querySelectorAll(":scope > [hidden]").length === 0) btn.parentElement.remove();
+    });
+  });
+
+  /* ---------- Harita (tıklayınca yüklenir) ---------- */
+  doc.querySelectorAll("[data-map]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var box = btn.closest(".map-box");
+      var iframe = doc.createElement("iframe");
+      iframe.src = "https://maps.google.com/maps?q=" + encodeURIComponent(btn.dataset.map) + "&z=16&output=embed";
+      iframe.title = btn.dataset.title || "Harita";
+      iframe.loading = "lazy";
+      iframe.referrerPolicy = "no-referrer-when-downgrade";
+      box.innerHTML = "";
+      box.appendChild(iframe);
+    });
+  });
+
+  /* ---------- Sayfa içi menü vurgusu ---------- */
+  var subLinks = doc.querySelectorAll(".subnav a[href^='#']");
+  if (subLinks.length && "IntersectionObserver" in window) {
+    var map = {};
+    subLinks.forEach(function (a) { map[a.getAttribute("href").slice(1)] = a; });
+    var so = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          subLinks.forEach(function (a) { a.classList.remove("is-active"); });
+          var a = map[en.target.id];
+          if (a) {
+            a.classList.add("is-active");
+            var bar = a.parentElement;
+            bar.scrollTo({ left: a.offsetLeft - (bar.clientWidth - a.offsetWidth) / 2, behavior: "smooth" });
+          }
+        }
+      });
+    }, { rootMargin: "-40% 0px -55% 0px" });
+    Object.keys(map).forEach(function (id) { var el = doc.getElementById(id); if (el) so.observe(el); });
+  }
 
   /* ---------- Yıl ---------- */
   doc.querySelectorAll("[data-year]").forEach(function (el) { el.textContent = new Date().getFullYear(); });
